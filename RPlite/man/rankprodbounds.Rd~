@@ -1,0 +1,186 @@
+\name{rankprodbounds}
+\alias{rankprodbounds}
+%- Also NEED an '\alias' for EACH other topic documented here.
+\title{
+%%  ~~function to do ... ~~
+}
+\description{
+%%  ~~ A concise (1-5 lines) description of what the function does. ~~
+}
+\usage{
+rankprodbounds(rho, n, k, Delta)
+}
+%- maybe also 'usage' for other objects documented here.
+\arguments{
+  \item{rho}{
+%%     ~~Describe \code{rho} here~~
+}
+  \item{n}{
+%%     ~~Describe \code{n} here~~
+}
+  \item{k}{
+%%     ~~Describe \code{k} here~~
+}
+  \item{Delta}{
+%%     ~~Describe \code{Delta} here~~
+}
+}
+\details{
+%%  ~~ If necessary, more details than the description above ~~
+}
+\value{
+%%  ~Describe the value returned
+%%  If it is a LIST, use
+%%  \item{comp1 }{Description of 'comp1'}
+%%  \item{comp2 }{Description of 'comp2'}
+%% ...
+}
+\references{
+%% ~put references to the literature/web site here ~
+}
+\author{
+%%  ~~who you are~~
+}
+\note{
+%%  ~~further notes~~
+}
+
+%% ~Make other sections like Warning with \section{Warning }{....} ~
+
+\seealso{
+%% ~~objects to See Also as \code{\link{help}}, ~~~
+}
+\examples{
+##---- Should be DIRECTLY executable !! ----
+##-- ==>  Define data, use random,
+##--	or do  help(data=index)  for the standard data sets.
+
+## The function is currently defined as
+function (rho, n, k, Delta) 
+{
+    updateparam <- function(param, n, k, j, Delta) {
+        k1 <- 1 + k
+        j1 <- 1 + j
+        if (length(param[[k1, j1]]$e) == 0) {
+            if (j == 0) {
+                param[[k1, j1]]$e <- n^k
+                param[[k1, j1]]$d <- 0
+            }
+            else {
+                k0 <- k1 - 1
+                j0 <- j1 - 1
+                param <- updateparam(param, n, k - 1, j - 1, 
+                  Delta)
+                param00 = param[[k0, j0]]
+                newa0 = param00$a + 1
+                newb0 = param00$b
+                newc0 = param00$c/newa0
+                param11 = param00
+                if (k == j) {
+                  param11$e <- (1 - Delta) * (1 - param00$e)
+                  param11$d <- Delta * param00$d + param00$e
+                  param11$a <- c(1, param00$a, newa0)
+                  param11$b <- c(0, param00$b, newb0)
+                  param11$c <- c(param00$d, Delta * param00$c, 
+                    newc0)
+                }
+                else {
+                  param <- updateparam(param, n, k - 1, j, Delta)
+                  param01 <- param[[k0, j1]]
+                  logn <- log(n)
+                  lognnkj <- (k - j) * logn
+                  newa1 <- param01$a + 1
+                  newa <- c(newa0, newa1)
+                  newb <- c(newb0, param01$b)
+                  newc <- c(newc0, -param01$c/newa1)
+                  param11$e <- n * param01$e + (Delta - 1) * 
+                    (param00$e - param01$e)
+                  lognminb <- c(-1 * param00$b * logn, (1 - param01$b) * 
+                    logn)
+                  param11$d <- Delta * param00$d + (1 - Delta) * 
+                    param01$d/n + (param00$e - param01$e)/exp(lognnkj) - 
+                    sum(newc * (lognminb^newa))
+                  param11$a <- c(1, 1, param00$a, param01$a, 
+                    newa)
+                  param11$b <- c(0, 1, param00$b, param01$b, 
+                    newb)
+                  param11$c <- c(param00$d, -param01$d, Delta * 
+                    param00$c, (1 - Delta) * param01$c/n, newc)
+                }
+                param[[k1, j1]] <- makeunique(param11)
+            }
+        }
+        return(param)
+    }
+    makeunique <- function(param) {
+        ab <- t(rbind(param$a, param$b))
+        uniqueab <- unique(ab)
+        nunique <- dim(uniqueab)[1]
+        param$a <- t(uniqueab[, 1])
+        param$b <- t(uniqueab[, 2])
+        newc <- rep(0, nunique)
+        for (i in 1:nunique) {
+            iii <- intersect(which(ab[, 1] == uniqueab[i, 1]), 
+                which(ab[, 2] == uniqueab[i, 2]))
+            newc[i] <- sum(param$c[iii])
+        }
+        param$c <- newc
+        return(param)
+    }
+    if (any(rho > n^k) || any(rho < 1)) 
+        stop("rho out of bounds")
+    if (is.numeric(Delta) == FALSE) {
+        if (Delta == "geometric") {
+            temp1 <- rankprodbounds(rho, n, k, "upper")
+            temp2 <- rankprodbounds(rho, n, k, "lower")
+            pvalue <- sqrt(temp1 * temp2)
+            return(pvalue)
+        }
+        else {
+            Delta <- switch(Delta, upper = 1, lower = 0)
+        }
+    }
+    logn <- log(n)
+    allj <- ceiling(-(log(rho)/logn) + k)
+    minj <- min(allj)
+    maxj <- max(allj)
+    param <- matrix(list(), nrow = k + 1, ncol = maxj + 1)
+    for (i in 1:(k + 1)) {
+        for (j in 1:(maxj + 1)) {
+            param[[i, j]] <- list(a = c(), b = c(), c = c(), 
+                d = c(), e = c())
+        }
+    }
+    for (j in minj:maxj) {
+        param <- updateparam(param, n, k, j, Delta)
+    }
+    k1 <- 1 + k
+    G <- rep(0, length(rho))
+    for (j in unique(allj)) {
+        j1 <- 1 + j
+        iii <- which(allj == j)
+        thisrho <- rho[iii]
+        thisparam <- param[[k1, j1]]
+        thisG <- thisparam$e
+        if (j != 0) {
+            nrho <- length(thisrho)
+            nterms <- length(thisparam$a)
+            thisG <- thisG + thisparam$d * thisrho
+            d1 <- matrix(thisparam$c) \%*\% thisrho
+            d2 <- matrix(rep(log(thisrho), nterms), nrow = nterms, 
+                byrow = TRUE) - t(matrix(rep(logn * (k - j + 
+                thisparam$b), nrho), nrow = nrho, byrow = TRUE))
+            d3 <- t(matrix(rep(thisparam$a, nrho), nrow = nrho, 
+                byrow = TRUE))
+            thisG <- thisG + colSums(d1 * (d2^d3))
+        }
+        G[iii] <- thisG
+    }
+    pvalue <- G/n^k
+    return(pvalue)
+  }
+}
+% Add one or more standard keywords, see file 'KEYWORDS' in the
+% R documentation directory.
+\keyword{ ~kwd1 }
+\keyword{ ~kwd2 }% __ONLY ONE__ keyword per line
